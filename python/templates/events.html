@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<title>SyncScribe Network monitor</title>
+	<style>
+		body {
+			background-color: black;
+			font-size: 16px;
+			color: rgb(120, 255, 120);
+		}
+		table, th, td {
+			font-size: 16px;
+			border: 2px solid green;
+			border-collapse: collapse;
+		}
+		th, td {
+			font-size: 18px;
+			padding: 10px;
+		}
+		th {
+			font-size: 16px;
+			text-align: left;
+		}
+		form {
+			font-size: 16px;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			margin-bottom: 20px;
+		}
+		input, select, button {
+			font-size: 16px;
+			background-color: #222;
+			color: rgb(120, 255, 120);;
+			border: 1px solid green;
+		}
+	</style>
+</head>
+
+<body>
+	<h1 id="syncsServerHeader">SyncScribe network monitor</h1>
+	<form id="connectForm">
+		<label>My name: <input type="text" name="id" required value="Web_monitor"></label>
+		<label>IP Address: <input type="text" name="ip" required value="127.0.0.1"></label>
+		<label>Port: <input type="number" name="port" required value="4444"></label>
+		<label>Protocol:
+			<select name="protocol">
+				<option value="tcp" selected>TCP</option>
+				<option value="udp">UDP</option>
+			</select>
+		</label>
+		<button type="button" onclick="connect()">Connect</button>
+	</form>
+	<h2>Events</h2>
+	<table id="eventsTable">
+		<thead>
+			<tr>
+				<th>ID</th>
+				<th>Type</th>
+				<th>Data</th>
+				<th>Size</th>
+				<th>Set value</th>
+				<th>Remove</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Data rows will be inserted here -->
+		</tbody>
+	</table>
+	<h2>Events list</h2>
+	<button onclick="updateEventsList()">Update Events List</button>
+	<button onclick="cleanEventsList()">Clean Events List</button>
+	<p>
+	<table id="eventsListTable">
+		<thead>
+			<tr>
+				<th>ID</th>
+				<th>Type</th>
+				<th>Data</th>
+				<th>Size</th>
+				<th>Changes</th>
+				<th>Subscribers</th>
+				<th>Writers</th>
+				<th>Set value</th>
+				<th>Add</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Data rows will be inserted here -->
+		</tbody>
+	</table>
+
+	<script>
+		function connect() {
+			const form = document.getElementById('connectForm');
+
+			const formData = new FormData(form);
+			const data = {
+				id: formData.get('id'),
+				ip: formData.get('ip'),
+				port: formData.get('port'),
+				protocol: formData.get('protocol')
+			};
+			fetch('/connect', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(data)
+			})
+			.then(response => {
+				if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				return response.json();
+			})
+			.then(data => {
+				console.log('Success:', data);
+			})
+			.catch((error) => {
+				console.error('Error:', error);
+			});
+		}
+
+		let updateInterval;
+
+		function fetchListData() {
+			fetch('/events_list')
+				.then(response => response.json())
+				.then(data => {
+					const table = document.getElementById('eventsListTable').getElementsByTagName('tbody')[0];
+					table.innerHTML = '';
+					data.events_list.forEach(event => {
+						let row = table.insertRow();
+						row.setAttribute('data-event-id', event.id.toString());
+						row.setAttribute('data-event-type', event.type.toString());
+						row.setAttribute('data-event-size', event.data_size.toString());
+						row.insertCell(0).innerHTML = event.id;
+						row.insertCell(1).innerHTML = event.type;
+						row.insertCell(2).innerHTML = event.short_data;
+						row.insertCell(3).innerHTML = event.data_size;
+						row.insertCell(4).innerHTML = event.count;
+						row.insertCell(5).innerHTML = event.consumers_count;
+						row.insertCell(6).innerHTML = event.producers_count;
+						let actionsCell = row.insertCell(7);
+						actionsCell.innerHTML = `
+						<input type="text" value="${event.short_data}">
+						<select>
+						<option value="value">Value</option>
+						<option value="hex">Hex</option>
+						</select>
+						<button onclick="setEvent(this)" data-event-id="${event.id}">Set</button>
+						`;
+						let addCell = row.insertCell(8);
+						addCell.innerHTML = `
+						<button onclick="subscribeEvent(this)" data-event-id="${event.id}">Subscribe</button>
+						`;
+
+					});
+					clearInterval(updateInterval);
+				});
+
+		}
+		function updateEventsList() {
+			fetch('/update_events_list', { method: 'POST' })
+				.then(response => {
+					if (updateInterval) clearInterval(updateInterval); // Clear previous interval if any
+					updateInterval = setInterval(fetchListData, 1000);
+				});
+		}
+		function cleanEventsList() {
+			const table = document.getElementById('eventsTableList').getElementsByTagName('tbody')[0];
+			table.innerHTML = '';
+		}
+
+		function fetchData() {
+			fetch('/events')
+				.then(response => response.json())
+				.then(data => {
+					const table = document.getElementById('eventsTable').getElementsByTagName('tbody')[0];
+					const existingRows = table.querySelectorAll('tr');
+					const existingIds = Array.from(existingRows).reduce((acc, row) => {
+						acc[row.getAttribute('data-event-id')] = row;
+						return acc;
+					}, {});
+
+					// Update or remove existing rows
+					Object.keys(existingIds).forEach(id => {
+						const eventData = data.events.find(event => event.id.toString() === id);
+						if (eventData) {
+							updateRow(existingIds[id], eventData);
+						} else {
+							existingIds[id].remove();
+						}
+					});
+
+					data.events.forEach(event => {
+						if (!existingIds[event.id.toString()]) {
+							addRow(table, event);
+						}
+					});
+				});
+			fetch('/server_header')
+				.then(response => response.json())
+				.then(data => {
+					document.getElementById('syncsServerHeader').textContent = data.header;
+				});
+
+		}
+
+
+		function updateRow(row, eventData) {
+			row.cells[1].innerHTML = eventData.type;
+			row.cells[2].innerHTML = eventData.data;
+			row.cells[3].innerHTML = eventData.data_size;
+		}
+
+		function addRow(table, event) {
+			let row = table.insertRow();
+			row.setAttribute('data-event-id', event.id.toString());
+			row.setAttribute('data-event-type', event.type.toString());
+			row.setAttribute('data-event-size', event.data_size.toString());
+			row.insertCell(0).innerHTML = event.id;
+			row.insertCell(1).innerHTML = event.type;
+			row.insertCell(2).innerHTML = event.data;
+			row.insertCell(3).innerHTML = event.data_size;
+			let actionsCell = row.insertCell(4);
+			actionsCell.innerHTML = `
+                        <input type="text" value="${event.data}">
+                        <select>
+                              <option value="value">Value</option>
+                              <option value="hex">Hex</option>
+                        </select>
+			<button onclick="setEvent(this)" data-event-id="${event.id}">Set</button>
+                        `;
+		}
+
+		function setEvent(button) {
+			const row = button.closest('tr');
+			if (!row) {
+				console.error('No row found for this event');
+				return;
+			}
+			const eventId = row.getAttribute('data-event-id');
+			const eventType = row.getAttribute('data-event-type');
+			const eventSize = row.getAttribute('data-event-size');
+			const newData = row.querySelector('input[type="text"]').value;
+			const newType = row.querySelector('select').value;
+
+			fetch('/set_event', {
+				method: 'POST',
+				headers: {
+				'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ eid: eventId, etype: eventType, esize: eventSize, data: newData, type: newType })
+			})
+			.then(response => {
+				if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				return response.json();
+			})
+			.then(data => {
+				console.log('Success:', data);
+			})
+			.catch((error) => {
+				console.error('Error:', error);
+			});
+		}
+
+		function subscribeEvent(button) {
+			const row = button.closest('tr');
+			if (!row) {
+				console.error('No row found for this event');
+				return;
+			}
+			const eventId = row.getAttribute('data-event-id');
+			const eventType = row.getAttribute('data-event-type');
+
+			fetch('/subscribe_event', {
+				method: 'POST',
+				headers: {
+				'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ eid: eventId, etype: eventType })
+			})
+			.then(response => {
+				if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				return response.json();
+			})
+			.then(data => {
+				console.log('Success:', data);
+			})
+			.catch((error) => {
+				console.error('Error:', error);
+			});
+		}
+		setInterval(fetchData, 1000);
+	</script>
+</body>
+
+</html>

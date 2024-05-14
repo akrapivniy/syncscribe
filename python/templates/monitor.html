@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<title>SyncScribe Network monitor</title>
+	<style>
+		body {
+			background-color: black;
+			font-size: 16px;
+			color: rgb(120, 255, 120);
+		}
+		table, th, td {
+			font-size: 16px;
+			border: 2px solid green;
+			border-collapse: collapse;
+		}
+		th, td {
+			font-size: 18px;
+			padding: 10px;
+		}
+		th {
+			font-size: 16px;
+			text-align: left;
+		}
+		form {
+			font-size: 16px;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			margin-bottom: 20px;
+		}
+		input, select, button {
+			font-size: 16px;
+			background-color: #222;
+			color: rgb(120, 255, 120);;
+			border: 1px solid green;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>SyncScribe network monitor</h1>
+	<form method="post">
+		<label>My name: <input type="text" name="id" required value="Web_monitor"></label>
+		<label>IP Address: <input type="text" name="ip" required value="127.0.0.1"></label>
+		<label>Port: <input type="number" name="port" required value="4444"></label>
+		<label>Protocol:
+			<select name="protocol">
+				<option value="tcp" selected>TCP</option>
+				<option value="udp">UDP</option>
+			</select>
+		</label>
+		<button type="submit">Connect</button>
+	</form>
+	<h2>Events</h2>
+	<table id="eventsTable">
+		<thead>
+			<tr>
+				<th>ID</th>
+				<th>Type</th>
+				<th>Data</th>
+				<th>Size</th>
+				<th>Changes</th>
+				<th>Subscribers</th>
+				<th>Writers</th>
+				<th>Set value</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Data rows will be inserted here -->
+		</tbody>
+	</table>
+	<h2>Channels</h2>
+	<table id="channelsTable">
+		<thead>
+			<tr>
+				<th>ID</th>
+				<th>Announcements Count</th>
+				<th>Requests Count</th>
+				<th>IP</th>
+				<th>Port</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Data rows will be inserted here -->
+		</tbody>
+	</table>
+	<h2>Clients</h2>
+	<table id="ClientsTable">
+		<thead>
+			<tr>
+				<th>ID</th>
+				<th>IP</th>
+				<th>RX</th>
+				<th>TX</th>
+				<th>Subscribed</th>
+				<th>Writes</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Data rows will be inserted here -->
+		</tbody>
+	</table>
+
+	<script>
+		function fetchData() {
+			fetch('/channels')
+				.then(response => response.json())
+				.then(data => {
+					const table = document.getElementById('channelsTable').getElementsByTagName('tbody')[0];
+					table.innerHTML = '';
+					data.channels.forEach(channel => {
+						let row = table.insertRow();
+						row.insertCell(0).innerHTML = channel.id;
+						row.insertCell(1).innerHTML = channel.anons_count;
+						row.insertCell(2).innerHTML = channel.request_count;
+						row.insertCell(3).innerHTML = channel.ip;
+						row.insertCell(4).innerHTML = channel.port;
+					});
+				});
+
+			fetch('/clients')
+				.then(response => response.json())
+				.then(data => {
+					const table = document.getElementById('ClientsTable').getElementsByTagName('tbody')[0];
+					table.innerHTML = '';
+					data.clients.forEach(client => {
+						let row = table.insertRow();
+						row.insertCell(0).innerHTML = client.id;
+						row.insertCell(1).innerHTML = client.ip;
+						row.insertCell(2).innerHTML = client.rx_event_count;
+						row.insertCell(3).innerHTML = client.tx_event_count;
+						row.insertCell(4).innerHTML = client.event_subscribe;
+						row.insertCell(5).innerHTML = client.event_write;
+					});
+				});
+
+
+			fetch('/events')
+				.then(response => response.json())
+				.then(data => {
+					const table = document.getElementById('eventsTable').getElementsByTagName('tbody')[0];
+					const existingRows = table.querySelectorAll('tr');
+					const existingIds = Array.from(existingRows).reduce((acc, row) => {
+						acc[row.getAttribute('data-event-id')] = row;
+						return acc;
+					}, {});
+
+					// Update or remove existing rows
+					Object.keys(existingIds).forEach(id => {
+						const eventData = data.events.find(event => event.id.toString() === id);
+						if (eventData) {
+							updateRow(existingIds[id], eventData);
+						} else {
+							existingIds[id].remove();
+						}
+					});
+
+					data.events.forEach(event => {
+						if (!existingIds[event.id.toString()]) {
+							addRow(table, event);
+						}
+					});
+				});
+
+		}
+		function updateRow(row, eventData) {
+			row.cells[1].innerHTML = eventData.type;
+			row.cells[2].innerHTML = eventData.short_data;
+			row.cells[3].innerHTML = eventData.data_size;
+			row.cells[4].innerHTML = eventData.count;
+			row.cells[5].innerHTML = eventData.consumers_count;
+			row.cells[6].innerHTML = eventData.producers_count;
+		}
+
+		function addRow(table, event) {
+			let row = table.insertRow();
+			row.setAttribute('data-event-id', event.id.toString());
+			row.setAttribute('data-event-type', event.type.toString());
+			row.setAttribute('data-event-size', event.data_size.toString());
+			row.insertCell(0).innerHTML = event.id;
+			row.insertCell(1).innerHTML = event.type;
+			row.insertCell(2).innerHTML = event.short_data;
+			row.insertCell(3).innerHTML = event.data_size;
+			row.insertCell(4).innerHTML = event.count;
+			row.insertCell(5).innerHTML = event.consumers_count;
+			row.insertCell(6).innerHTML = event.producers_count;
+			let actionsCell = row.insertCell(7);
+			actionsCell.innerHTML = `
+                        <input type="text" value="${event.short_data}">
+                        <select>
+                              <option value="value">Value</option>
+                              <option value="hex">Hex</option>
+                        </select>
+			<button onclick="setEvent(this)" data-event-id="${event.id}">Set</button>
+                        `;
+		}
+
+		function setEvent(button) {
+			const row = button.closest('tr');
+			if (!row) {
+				console.error('No row found for this event');
+				return;
+			}
+			const eventId = row.getAttribute('data-event-id');
+			const eventType = row.getAttribute('data-event-type');
+			const eventSize = row.getAttribute('data-event-size');
+			const newData = row.querySelector('input[type="text"]').value;
+			const newType = row.querySelector('select').value;
+
+			fetch('/set_event', {
+				method: 'POST',
+				headers: {
+				'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ eid: eventId, etype: eventType, esize: eventSize, data: newData, type: newType })
+			})
+			.then(response => {
+				if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				return response.json();
+			})
+			.then(data => {
+				console.log('Success:', data);
+			})
+			.catch((error) => {
+				console.error('Error:', error);
+			});
+		}
+		// Fetch data every second
+		setInterval(fetchData, 1000);
+	</script>
+</body>
+
+</html>

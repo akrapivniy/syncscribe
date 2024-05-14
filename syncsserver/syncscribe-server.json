@@ -1,0 +1,24 @@
+{
+	"client_name": "SyncScribe client on server",
+	"server_name": "SyncScribe server example",
+	"address": "127.0.0.1",
+	"port": 4444,
+	"protocol": "tcp",
+	"variables": [
+		{
+			"name": "pause",
+			"type": "int",
+			"value": "0"
+		},
+		{
+			"name": "mode",
+			"type": "int",
+			"value": "0"
+		},
+		{
+			"name": "message",
+			"type": "string",
+			"value": "-"
+		}
+	]
+}

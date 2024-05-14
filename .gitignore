@@ -1,0 +1,37 @@
+*.d
+*.o
+*.so.*
+*.a
+*.bin
+*.elf
+*.log
+*.obj
+*.exe
+*.pdb
+*.user
+*.aps
+*.pch
+*.lib
+*.vspscc
+*.bak
+*.cache
+\#*
+.\#*
+*~
+*.swp
+*.pyc
+__pycache__
+
+
+# build directory
+[Bb]uild*/
+[Dd]ebug*/
+[Rr]elease*/
+
+# netbeans, intellij, eclipse project files
+nbproject
+netbeans
+.idea/
+.vscode/
+Thumbs.db
+/*.tar.gz
